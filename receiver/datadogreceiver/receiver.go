@@ -96,7 +96,7 @@ func (ddr *datadogReceiver) handleTraces(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	for _, ddTrace := range ddTraces {
-		otelTraces := toTraces(ddTrace, req)
+		otelTraces := toTraces(ddTrace, req, ddr.config.TraceID128BitSupport)
 		spanCount = otelTraces.SpanCount()
 		err = ddr.nextConsumer.ConsumeTraces(obsCtx, otelTraces)
 		if err != nil {

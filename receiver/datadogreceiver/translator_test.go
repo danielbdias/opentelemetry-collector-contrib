@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	vmsgp "github.com/vmihailenco/msgpack/v4"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 	semconv "go.opentelemetry.io/collector/semconv/v1.16.0"
 	"google.golang.org/protobuf/proto"
 )
@@ -88,7 +89,7 @@ func TestTracePayloadV05Unmarshalling(t *testing.T) {
 		LanguageVersion: req.Header.Get("Datadog-Meta-Lang-Version"),
 		TracerVersion:   req.Header.Get("Datadog-Meta-Tracer-Version"),
 		Chunks:          traceChunksFromTraces(traces),
-	}, req)
+	}, req, false)
 	assert.Equal(t, 1, translated.SpanCount(), "Span Count wrong")
 	span := translated.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0)
 	assert.NotNil(t, span)
@@ -203,4 +204,66 @@ func TestUpsertHeadersAttributes(t *testing.T) {
 	val, ok = attrs2.Get(semconv.AttributeTelemetrySDKLanguage)
 	assert.True(t, ok)
 	assert.Equal(t, "dotnet", val.Str())
+}
+
+func getTraceIDsFromTraces(traces ptrace.Traces) []string {
+	traceIdSet := map[string]bool{}
+
+	resourceSpanList := traces.ResourceSpans()
+
+	for i := 0; i < resourceSpanList.Len(); i++ {
+		scopeSpanSliceList := resourceSpanList.At(i).ScopeSpans()
+
+		for j := 0; j < scopeSpanSliceList.Len(); j++ {
+			scopeSpans := scopeSpanSliceList.At(j).Spans()
+
+			for k := 0; k < scopeSpans.Len(); k++ {
+				traceID := scopeSpans.At(k).TraceID().String()
+				traceIdSet[traceID] = true
+			}
+		}
+	}
+
+	result := []string{}
+
+	for traceID, _ := range traceIdSet {
+		result = append(result, traceID)
+	}
+
+	return result
+}
+
+func TestTraceIDTranslation(t *testing.T) {
+	traces := getTraces(t)
+	apiPayload := pb.TracerPayload{
+		LanguageName:    "1",
+		LanguageVersion: "1",
+		Chunks:          traceChunksFromTraces(traces),
+		TracerVersion:   "1",
+	}
+	var reqBytes []byte
+	bytez, _ := apiPayload.MarshalMsg(reqBytes)
+	req, _ := http.NewRequest(http.MethodPost, "/v0.7/traces", io.NopCloser(bytes.NewReader(bytez)))
+
+	// Test case 1: 128-bit translation is disabled
+	flag128BitTranslation := false
+	translatedWith128BitDisabled := toTraces(&pb.TracerPayload{
+		Chunks: traceChunksFromTraces(traces),
+	}, req, flag128BitTranslation)
+
+	traceIDsWithLowerPart := getTraceIDsFromTraces(translatedWith128BitDisabled)
+	assert.Equal(t, 1, len(traceIDsWithLowerPart), "TraceID Count wrong")
+
+	assert.Equal(t, "0000000000000000ab54a98ceb1ef0d2", traceIDsWithLowerPart[0])
+
+	// Test case 2: 128-bit translation is enabled
+	flag128BitTranslation = true
+	translatedWith128BitEnabled := toTraces(&pb.TracerPayload{
+		Chunks: traceChunksFromTraces(traces),
+	}, req, flag128BitTranslation)
+
+	fullTraceIDs := getTraceIDsFromTraces(translatedWith128BitEnabled)
+	assert.Equal(t, 1, len(fullTraceIDs), "TraceID Count wrong")
+
+	assert.Equal(t, "0000000000000000ab54a98ceb1ef0d2", fullTraceIDs[0])
 }

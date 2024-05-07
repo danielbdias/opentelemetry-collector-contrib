@@ -14,4 +14,6 @@ type Config struct {
 	confighttp.ServerConfig `mapstructure:",squash"`
 	// ReadTimeout of the http server
 	ReadTimeout time.Duration `mapstructure:"read_timeout"`
+	// Indicate if the receiver supports 128-bit Trace IDs
+	TraceID128BitSupport bool `mapstructure:"trace_id_128_bit_support"`
 }

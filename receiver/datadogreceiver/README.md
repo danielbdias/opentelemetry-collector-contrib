@@ -21,6 +21,7 @@ Accepts traces in the Datadog APM format.
 - v0.5 (msgpack custom format)
 - v0.6
 - v0.7
+  
 ## Configuration
 
 Example:
@@ -30,11 +31,17 @@ receivers:
   datadog:
     endpoint: localhost:8126
     read_timeout: 60s
+    trace_id_128_bit_support: false
 ```
 ### read_timeout (Optional)
 The read timeout of the HTTP Server
 
 Default: 60s
+
+### trace_id_128_bit_support (Optional)
+Flag to tell if this receiver can receive 128-bit Trace IDs 
+
+Default: false
 
 ### HTTP Service Config
 

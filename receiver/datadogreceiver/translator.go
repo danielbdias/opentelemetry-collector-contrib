@@ -51,7 +51,7 @@ func upsertHeadersAttributes(req *http.Request, attrs pcommon.Map) {
 	}
 }
 
-func toTraces(payload *pb.TracerPayload, req *http.Request) ptrace.Traces {
+func toTraces(payload *pb.TracerPayload, req *http.Request, support128BitTraceID bool) ptrace.Traces {
 	var traces pb.Traces
 	for _, p := range payload.GetChunks() {
 		traces = append(traces, p.GetSpans())
@@ -95,7 +95,12 @@ func toTraces(payload *pb.TracerPayload, req *http.Request) ptrace.Traces {
 			}
 			newSpan := slice.AppendEmpty()
 
-			newSpan.SetTraceID(uInt64ToTraceID(0, span.TraceID))
+			if support128BitTraceID {
+				newSpan.SetTraceID(uInt64To128BitTraceID(span.TraceID))
+			} else {
+				newSpan.SetTraceID(uInt64ToTraceID(0, span.TraceID))
+			}
+
 			newSpan.SetSpanID(uInt64ToSpanID(span.SpanID))
 			newSpan.SetStartTimestamp(pcommon.Timestamp(span.Start))
 			newSpan.SetEndTimestamp(pcommon.Timestamp(span.Start + span.Duration))
@@ -374,6 +379,12 @@ func uInt64ToTraceID(high, low uint64) pcommon.TraceID {
 	traceID := [16]byte{}
 	binary.BigEndian.PutUint64(traceID[:8], high)
 	binary.BigEndian.PutUint64(traceID[8:], low)
+	return traceID
+}
+
+func uInt64To128BitTraceID(id uint64) pcommon.TraceID {
+	traceID := [16]byte{}
+	binary.BigEndian.PutUint64(traceID[:], id)
 	return traceID
 }
 
